@@ -1,0 +1,2 @@
+{"id": "primes", "task": "Write primes.py that prints all primes below 100, and notes.md with one sentence on how it works.", "expect": ["primes.py", "notes.md"]}
+{"id": "haiku", "task": "Write haiku.txt containing a haiku about a game console.", "expect": ["haiku.txt"]}

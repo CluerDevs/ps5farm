@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ps5farm"
+version = "0.1.0"
+description = "Run file-writing jobs on a fleet of PS5LM consoles"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+dependencies = []
+
+[project.scripts]
+ps5farm = "ps5farm.cli:main"
+
+[tool.setuptools]
+packages = ["ps5farm"]
