@@ -39,8 +39,10 @@ class FarmTests(unittest.TestCase):
         self.assertTrue(all(f.max_active == 1 for f in self.fakes))
         self.assertTrue(all(len(f.jobs_done) >= 1 for f in self.fakes), "work spread across fleet")
         for i in range(9):
-            self.assertEqual(open(os.path.join(self.tmp, "out", f"j{i}", "out.txt")).read(), f"done jobs/j{i}")
-        lines = open(os.path.join(self.tmp, "out", "results.jsonl")).read().splitlines()
+            with open(os.path.join(self.tmp, "out", f"j{i}", "out.txt")) as fh:
+                self.assertEqual(fh.read(), f"done jobs/j{i}")
+        with open(os.path.join(self.tmp, "out", "results.jsonl")) as fh:
+            lines = fh.read().splitlines()
         self.assertEqual(len(lines), 9)
         self.assertEqual(json.loads(lines[0])["status"], "ok")
 

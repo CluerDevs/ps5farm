@@ -4,6 +4,7 @@ import os
 import posixpath
 import re
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from ps5farm.client import Console
@@ -20,6 +21,9 @@ class FakeConsole:
 
     def __init__(self, root, ip, port=0, mode="good"):
         self.root, self.mode = root, mode
+        self.script = []        # mode "script": one entry per chat call, see _scripted()
+        self.bodies = []        # every chat request body received
+        self.tool_calls = []    # (name, params) of every /tools call
         self.active = 0
         self.max_active = 0
         self.jobs_done = []
@@ -53,15 +57,29 @@ class FakeConsole:
                 if self.path == "/tools":
                     return self._send(fake.tool(body["tool"], body["params"]))
                 if self.path == "/v1/chat/completions":
-                    return self._send(fake.chat(body))
+                    out = fake.chat(body)
+                    if out == "DROP":  # console dies mid-request: close without answering
+                        self.close_connection = True
+                        self.connection.close()
+                        return
+                    if isinstance(out, str):  # non-JSON 200 body
+                        b = out.encode()
+                        self.send_response(200)
+                        self.send_header("Content-Length", str(len(b)))
+                        self.end_headers()
+                        self.wfile.write(b)
+                        return
+                    if isinstance(out, tuple):  # (http status, json)
+                        return self._send(out[1], out[0])
+                    return self._send(out)
                 self._send({"error": "nf"}, 404)
 
         self.server = ThreadingHTTPServer((ip, port), H)
         self.ip, self.port = ip, self.server.server_address[1]
-        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        threading.Thread(target=self.server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True).start()
 
-    def console(self):
-        return Console(self.ip, self.port)
+    def console(self, ftp_port=2121):
+        return Console(self.ip, self.port, ftp_port)
 
     def stop(self):
         self.server.shutdown()
@@ -69,6 +87,7 @@ class FakeConsole:
 
     # --- sandboxed tool execution ---
     def tool(self, name, p):
+        self.tool_calls.append((name, p))
         if name == "get_info":
             return {"os": "fake", "cwd": ""}
         rel = posixpath.normpath(p["path"].lstrip("/"))
@@ -88,12 +107,27 @@ class FakeConsole:
         return {"error": "unknown tool"}
 
     # --- scripted model ---
+    def _scripted(self, body):
+        """Each script entry answers one chat call. It is a dict {"message": {...},
+        "finish_reason": "stop"}, the string "DROP", a raw string (sent as a non-JSON body),
+        a (status, json) tuple, or a callable(body) returning one of those."""
+        if not self.script:
+            return {"choices": [{"message": {"role": "assistant", "content": "done"},
+                                 "finish_reason": "stop"}], "usage": {"completion_tokens": 1}}
+        item = self.script.pop(0)
+        item = item(body) if callable(item) else item
+        if isinstance(item, dict) and "message" in item:
+            return {"choices": [item], "usage": {"completion_tokens": 5}}
+        return item
+
     def chat(self, body):
+        self.bodies.append(body)
+        if self.mode == "script":
+            return self._scripted(body)
         msgs = body["messages"]
         self.active += 1
         self.max_active = max(self.max_active, self.active)
         try:
-            import time
             time.sleep(0.05)
             job = re.search(r"folder (jobs/[^/\s]+)/", msgs[0]["content"]).group(1)
             need = re.search(r"Required files: (.+?)\.(?:\n|$)", msgs[0]["content"])
