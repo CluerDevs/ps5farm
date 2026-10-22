@@ -55,6 +55,7 @@ The tools are sandboxed to `/data/PS5LM/scratch` on the console; `ps5farm` keeps
    python -m ps5farm run --hosts hosts.txt --jobs jobs.jsonl --out out
    ```
 
+   Unknown job fields (for example a typo like `expects`) are rejected. Exit code: 0 all ok, 1 some jobs failed, 2 bad input files, 130 interrupted. `status` also checks anonymous FTP login (`"ftp": true`).
    Files land in `out/<id>/`, and one record per job is appended to `out/results.jsonl`:
    status, console, attempts, steps, tokens, seconds, the model's final message and the exported files.
 
@@ -62,11 +63,11 @@ The tools are sandboxed to `/data/PS5LM/scratch` on the console; `ps5farm` keeps
 
 | field | meaning |
 |---|---|
-| `id` | unique name; becomes the folder `jobs/<id>/` |
+| `id` | unique name (1-64 of letters, digits, `.` `_` `-`, starting with a letter or digit; compared case-insensitively); becomes the folder `jobs/<id>/` |
 | `task` | what to do. Keep it short and self-contained |
-| `expect` | files that must exist and be non-empty, or the attempt counts as failed |
+| `expect` | files (relative to the job folder) that must exist and be non-empty, or the attempt counts as failed. A job that writes no files at all also fails |
 | `max_steps` | tool-call rounds allowed (default 8) |
-| `max_tokens` | per-reply cap (default 4000; reasoning models spend tokens thinking) |
+| `max_tokens` | per-reply cap (default 4000; reasoning models spend tokens thinking). A reply cut off with no answer is retried once with double the cap (up to 16000) |
 | `system` | extra instructions appended to the worker prompt |
 
 ### From Python
@@ -98,7 +99,8 @@ that, refuses tool paths outside the job folder, and blocks identical repeated r
 - **No authentication.** The PS5LM API and `/tools` endpoint, and ftpsrv, have no login. Anyone
   who can reach the consoles can read and write their scratch folder. Keep them on an isolated
   network, never exposed to the internet.
-- `FtpExporter.cleanup()` deletes `jobs/<id>/` on the console before each attempt.
+- `FtpExporter.cleanup()` deletes `jobs/<id>/` on the console before each attempt, and `out/<id>/` on this PC is emptied before each export. Re-running with the same `--out` appends to `results.jsonl`.
+- If you interrupt a run (Ctrl-C), a console may keep generating for a few minutes; its next job queues behind that.
 - Do not run files a model wrote without reading them first.
 
 ## Legal
