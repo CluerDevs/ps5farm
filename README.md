@@ -69,6 +69,7 @@ The tools are sandboxed to `/data/PS5LM/scratch` on the console; `ps5farm` keeps
 | `max_steps` | tool-call rounds allowed (default 8) |
 | `max_tokens` | per-reply cap (default 4000; reasoning models spend tokens thinking). A reply cut off with no answer is retried once with double the cap (up to 16000) |
 | `system` | extra instructions appended to the worker prompt |
+| `thinking` | `false` asks the model to skip its reasoning phase (default `true`). Much faster and avoids runaway thinking on small models; reasoning can help on hard problems |
 
 ### From Python
 

@@ -12,7 +12,7 @@ from .client import Console, ConsoleError
 _ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 _RESERVED = {"results", "con", "prn", "aux", "nul",
              *(f"com{i}" for i in range(1, 10)), *(f"lpt{i}" for i in range(1, 10))}
-_FIELDS = {"id", "task", "expect", "max_steps", "max_tokens", "system"}
+_FIELDS = {"id", "task", "expect", "max_steps", "max_tokens", "system", "thinking"}
 MAX_TOOL_OUTPUT = 12000   # chars of one tool result fed back to the model
 MAX_TOKENS_CAP = 16000    # ceiling when a reply is cut off and we ask again with more room
 
@@ -53,6 +53,7 @@ class Job:
     max_steps: int = 8
     max_tokens: int = 4000
     system: str = ""  # extra instructions appended to the worker prompt
+    thinking: bool = True  # False asks the model to skip its reasoning phase (much faster, fewer runaway replies)
 
     def __post_init__(self):
         check_job_id(self.id)
@@ -65,6 +66,8 @@ class Job:
                 raise ValueError(f"job {self.id}: '{name}' must be a positive integer")
         if not isinstance(self.system, str):
             raise ValueError(f"job {self.id}: 'system' must be a string")
+        if not isinstance(self.thinking, bool):
+            raise ValueError(f"job {self.id}: 'thinking' must be true or false")
 
     @property
     def dir(self):
@@ -87,7 +90,7 @@ class Job:
             return cls(
                 id=str(d["id"]), task=d["task"], expect=d.get("expect") or [],
                 max_steps=int(d.get("max_steps", 8)), max_tokens=int(d.get("max_tokens", 4000)),
-                system=d.get("system") or "",
+                system=d.get("system") or "", thinking=d.get("thinking", True),
             )
         except (TypeError, ValueError) as e:
             raise ValueError(str(e)) from e
@@ -176,7 +179,8 @@ def run_job(console: Console, job: Job, tools=None, log=lambda s: None) -> JobRe
     max_tokens = job.max_tokens
     made_calls = False
     for step in range(job.max_steps):
-        r = console.chat(msgs, tools=tools, max_tokens=max_tokens)
+        extra = {} if job.thinking else {"chat_template_kwargs": {"enable_thinking": False}}
+        r = console.chat(msgs, tools=tools, max_tokens=max_tokens, **extra)
         if not isinstance(r, dict):
             raise ConsoleError(f"{console.host}: bad chat reply: {str(r)[:200]}")
         if "choices" not in r and "error" in r:

@@ -28,6 +28,7 @@ class FakeConsole:
         self.max_active = 0
         self.jobs_done = []
         self.rogue_tried = False
+        self.bodies = []
         fake = self
         os.makedirs(root, exist_ok=True)
 
@@ -125,6 +126,7 @@ class FakeConsole:
         if self.mode == "script":
             return self._scripted(body)
         msgs = body["messages"]
+        self.bodies.append(body)
         self.active += 1
         self.max_active = max(self.max_active, self.active)
         try:
